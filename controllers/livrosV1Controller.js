@@ -1,4 +1,6 @@
 const { Livro } = require("../models");  /* acessar todo o banco de dados */
+const { Op } = require("sequelize");
+const countriesApi = require('../services/Countries');
 
 const livrosV1Controller = {
 
@@ -12,81 +14,96 @@ const livrosV1Controller = {
         try {
             const { id } = req.params;
 
-            const book = await Livro.findByPk(id);
-            if (!book) {
-                return res.status(404).json({ error: true, message: "O Livro não foi encontrado" });
+            const book = await Livro.findByPk(id, { raw: true });
+
+            const pais = await countriesApi.getByAlphaCode("br");
+
+            Object.assign(book, {
+                bandeira: pais[0].flags.png
+            })
+
+            if(!book) {
+                return res.status(404).json({error: true, message: "O livro não foi encontrado"});
             }
 
-            return res.status(200).json(book);
-        } catch (error) {
+            return res.status(200).json(book)
+        } catch(error){
             console.log(error);
-            return res.status(500).json({ error: true, message: "Sistema Indisponivel, tente novamente mais tard!" })
-
+            return res.status(500).json({error: true, message: "Sistema indisponível, tente novamente mais tarde!"})
         }
+        
     },
 
     create: async (req, res) => {
         try {
             const { titulo, quantidade_paginas, autor, ano_lancamento, estoque } = req.body
-           
+
+
+            const verificarSeExiste = await Livro.findOne({
+                where: {
+                    [Op.and]: [{ titulo }, { autor }]
+                }
+            });
+            if (verificarSeExiste) {
+                return res.status(422).json({ message: "Livro já cadastrado" });
+            }
+
             const livro = await Livro.create({
                 titulo,
                 quantidade_paginas,
                 autor,
                 ano_lancamento,
                 estoque
-            },
-            );
-            if (livro) {
-                return res.status(404).json({ error: true, message: "ja existe esse livro em nossa biblioteca"});
-            }
+            });
 
-            return res.status(201).json(livro);
+            return res.status(201).json({ message: "Livro cadastrado com sucesso", livro: livro });
 
         } catch (error) {
             console.log(error);
-            return res.status(500).json({ error: true, message: "Sistema Indisponivel, O Livro não pode ser cadastrado"})
+            return res.status(500).json({message: "Servidor Indisponivel" })
         }
     },
 
 
     update: async (req, res) => {
         try {
-        const { id } = req.params;
-        const { titulo, quantidade_paginas, autor, ano_lancamento, estoque } = req.body;
-        const livro = await Livro.findByPk(id);
-        await Livro.update({
-            titulo,
-            quantidade_paginas,
-            autor,
-            ano_lancamento,
-            estoque,
-        },
-            {
-                where: { id }
+            const { id } = req.params;
+            const { titulo, quantidade_paginas, autor, ano_lancamento, estoque } = req.body;
+            const livro = await Livro.findByPk(id);
 
-            })
+            if (!livro) { return res.status(404).json({ error: "Livro não encontrado" }) };
 
-        return res.status(200).json(livro);
-    } catch (error) {
-        console.log(error);
-        return res.status(500).json({ error: true, message: "Sistema Indisponivel, O Livro não pode ser cadastrado"})
-    }
+            await Livro.update({
+                titulo,
+                quantidade_paginas,
+                autor,
+                ano_lancamento,
+                estoque,
+            }, { where: { id } })
+
+            const livroAtualizado = await Livro.findByPk(id);
+
+            return res.status(200).json(livroAtualizado);
+
+        } catch (error) {
+            console.log(error);
+            return res.status(500).json("Servidor Indisponível");
+        }
     },
 
     destroy: async (req, res) => {
         try {
-        const { id } = req.params;
+            const { id } = req.params;
 
-        const livro = await Livro.destroy({
-            where: { id }
-        })
+            const livro = await Livro.destroy({
+                where: { id }
+            })
 
-        return res.status(200).json(livro);
+            return res.status(204).json();
         } catch (error) {
-        console.log(error);
-        return res.status(500).json({ error: true, message: "Sistema Indisponivel, O Livro não pode ser cadastrado"})
-    }
+            console.log(error);
+            return res.status(500).json("Servidor Indisponível");
+        }
     }
 
 
